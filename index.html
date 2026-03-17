@@ -125,6 +125,7 @@
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 15, color: "rgba(255,255,255,0.8)" }}>
             <span style={{ fontSize: 20 }}>{cur.icon}</span><span>{cur.label}...</span>
           </div>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 20 }}>This usually takes 15–30 seconds</p>
         </div>
       );
     }
@@ -254,9 +255,16 @@
     }
 
     function normalizeUrl(input) {
-      let url = input.trim();
+      let url = input.trim().replace(/\/+$/, '');
+      // Strip any accidental quotes or angle brackets
+      url = url.replace(/^["'<]+|["'>]+$/g, '');
       if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-      try { new URL(url); return url; } catch { return null; }
+      try { 
+        const parsed = new URL(url);
+        // Must have a real domain with a TLD
+        if (!parsed.hostname.includes('.')) return null;
+        return parsed.toString().replace(/\/+$/, '');
+      } catch { return null; }
     }
     function extractScores(d) {
       const c = d?.lighthouseResult?.categories || {};
@@ -321,19 +329,52 @@ Each category: 2-5 issues. Frame everything for CAMP DIRECTORS, not developers.`
       const runAudit = useCallback(async () => {
         setError(null);
         const nUrl = normalizeUrl(url);
-        if (!nUrl) { setError("Please enter a valid website URL."); return; }
+        if (!nUrl) { setError("Please enter a valid website URL (e.g. www.yourcamp.com)."); return; }
         setNormalizedUrl(nUrl); setStep("scanning");
-        try {
-          const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(nUrl)}&category=performance&category=accessibility&category=seo&category=best-practices&strategy=mobile`);
-          if (!res.ok) throw new Error(`API ${res.status}`);
-          const data = await res.json();
-          if (data.error) throw new Error(data.error.message);
-          setScores(extractScores(data)); setIssueCount(countIssues(data)); setDiagnostics(extractDiagnostics(data));
-          setTimeout(() => setStep("teaser"), 1500);
-        } catch (err) {
-          console.error(err);
-          setError("We couldn't reach that website. Please check the URL and try again.");
-          setStep("input");
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            console.log(`[Audit] Attempt ${attempt} for: ${nUrl}`);
+
+            // Route through Netlify function (uses server-side Google API key)
+            const res = await fetch(`${API_BASE}/.netlify/functions/psi`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: nUrl })
+            });
+
+            const data = await res.json();
+
+            if (data.error) {
+              console.error(`[Audit] PSI error:`, data.error);
+              if (attempt === 1 && (data.code >= 500 || data.error.includes("FAILED"))) {
+                await new Promise(r => setTimeout(r, 3000));
+                continue;
+              }
+              if (data.error.includes("DNS")) throw new Error("That domain doesn't appear to exist. Check for typos.");
+              if (data.error.includes("FAILED_DOCUMENT") || data.error.includes("unreachable")) throw new Error("The website couldn't be loaded. It may be down or blocking automated requests.");
+              if (data.error.includes("ERRORED_DOCUMENT")) throw new Error("The website returned an error. It may be temporarily unavailable.");
+              throw new Error(data.error);
+            }
+
+            if (!data.lighthouseResult?.categories) {
+              throw new Error("Incomplete results — the site may be too slow to analyze. Try again.");
+            }
+
+            setScores(extractScores(data));
+            setIssueCount(countIssues(data));
+            setDiagnostics(extractDiagnostics(data));
+            setTimeout(() => setStep("teaser"), 1500);
+            return;
+          } catch (err) {
+            console.error(`[Audit] Attempt ${attempt}:`, err);
+            if (attempt === 2 || err.message.includes("typos") || err.message.includes("doesn't appear")) {
+              setError(err.message || "Something went wrong. Please try again.");
+              setStep("input");
+              return;
+            }
+            await new Promise(r => setTimeout(r, 3000));
+          }
         }
       }, [url]);
 
@@ -424,7 +465,12 @@ Each category: 2-5 issues. Frame everything for CAMP DIRECTORS, not developers.`
                     onMouseEnter={e => e.target.style.transform = "translateY(-1px)"} onMouseLeave={e => e.target.style.transform = "translateY(0)"}
                   >Audit My Website</button>
                 </div>
-                {error && <p style={{ fontSize: 13, color: BRAND.red, margin: 0 }}>{error}</p>}
+                {error && (
+                  <div style={{ maxWidth: 540, margin: "0 auto", padding: "12px 16px", background: `${BRAND.red}08`, border: `1px solid ${BRAND.red}25`, borderRadius: 10 }}>
+                    <p style={{ fontSize: 14, color: BRAND.red, margin: "0 0 4px", fontWeight: 600 }}>{error}</p>
+                    <p style={{ fontSize: 12, color: BRAND.slate, margin: 0 }}>Make sure the URL is a real, publicly accessible website. Example: www.crossroadscamp.org</p>
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 36, flexWrap: "wrap" }}>
                   {[["⚡","Speed"],["📱","Mobile"],["🔍","SEO"],["♿","Accessibility"]].map(([icon, label]) => (
                     <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: BRAND.slate, fontWeight: 500 }}><span>{icon}</span>{label}</div>
