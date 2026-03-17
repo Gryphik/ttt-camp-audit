@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free Camp Website Audit | Tic Tac Toe Marketing</title>
+  <meta name="description" content="Get a free, instant audit of your camp's website. See what's helping and hurting your enrollment numbers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; padding: 0; font-family: 'Outfit', sans-serif; background: #faf8f5; }
+    input:focus { outline: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel" data-type="module">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const BRAND = {
+      navy: "#1a1e2e", navyLight: "#252a3a", navyMid: "#2f3549",
+      teal: "#2ec4b6", tealDark: "#25a89c", tealGlow: "#2ec4b620",
+      orange: "#e8783a", orangeLight: "#f09352", orangeGlow: "#e8783a18",
+      cream: "#faf8f5", warmWhite: "#fefcfa", white: "#ffffff",
+      charcoal: "#1e1e1e", slate: "#6b7280",
+      grayLight: "#e5e7eb", grayXLight: "#f3f4f6",
+      red: "#ef4444", yellow: "#eab308", green: "#22c55e",
+    };
+
+    const LOGO_URL = "https://www.tictactoemarketingforcamps.com/wp-content/uploads/2021/04/TTT-Logo-White-1024x320.png";
+    const SCHEDULE_URL = "https://www.tictactoemarketingforcamps.com/schedule-a-call";
+    const WEBSITE_SERVICE_URL = "https://www.tictactoemarketingforcamps.com/website-design-and-seo/";
+    const SITE_URL = "https://www.tictactoemarketingforcamps.com";
+
+    // ── CHANGE THIS to your Netlify URL after deploy ──
+    const API_BASE = window.location.origin;
+
+    function getScoreColor(s) { return s >= 90 ? BRAND.green : s >= 50 ? BRAND.yellow : BRAND.red; }
+    function getGrade(s) { return s >= 90 ? "A" : s >= 80 ? "B" : s >= 65 ? "C" : s >= 50 ? "D" : "F"; }
+    function getVerdict(s) { return s >= 90 ? "Excellent" : s >= 80 ? "Good" : s >= 65 ? "Needs Work" : s >= 50 ? "Below Average" : "Critical"; }
+
+    function ScoreGauge({ score, size = 120, label, animated = true }) {
+      const [displayScore, setDisplayScore] = useState(0);
+      const radius = (size - 12) / 2;
+      const circ = 2 * Math.PI * radius;
+      const offset = circ - (displayScore / 100) * circ;
+      const color = getScoreColor(score);
+      useEffect(() => {
+        if (!animated) { setDisplayScore(score); return; }
+        let frame, start;
+        const go = (ts) => { if (!start) start = ts; const p = Math.min((ts - start) / 1200, 1); setDisplayScore(Math.round((1 - Math.pow(1 - p, 3)) * score)); if (p < 1) frame = requestAnimationFrame(go); };
+        frame = requestAnimationFrame(go);
+        return () => cancelAnimationFrame(frame);
+      }, [score, animated]);
+      return (
+        <div style={{ textAlign: "center" }}>
+          <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+            <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={BRAND.navyMid} strokeWidth="8" opacity="0.18" />
+            <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: "stroke-dashoffset 0.3s ease" }} />
+          </svg>
+          <div style={{ marginTop: -size/2 - 18, position: "relative", height: size/2 + 18, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: size > 100 ? 6 : 2 }}>
+            <span style={{ fontSize: size > 100 ? 34 : 22, fontWeight: 800, color }}>{displayScore}</span>
+            {size > 100 && <span style={{ fontSize: 11, color: BRAND.slate, letterSpacing: 1, textTransform: "uppercase" }}>/ 100</span>}
+          </div>
+          {label && <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: BRAND.charcoal }}>{label}</div>}
+        </div>
+      );
+    }
+
+    function TicTacToeGrid({ size = 60, opacity = 0.08, color = "#fff" }) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 60 60" style={{ opacity }}>
+          <line x1="20" y1="2" x2="20" y2="58" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="40" y1="2" x2="40" y2="58" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="2" y1="20" x2="58" y2="20" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="2" y1="40" x2="58" y2="40" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
+      );
+    }
+
+    const SCAN_PHASES = [
+      { label: "Connecting to website", icon: "🔗", duration: 2000 },
+      { label: "Testing mobile experience", icon: "📱", duration: 3000 },
+      { label: "Measuring page speed", icon: "⚡", duration: 4000 },
+      { label: "Checking parent-friendliness", icon: "👨‍👩‍👧", duration: 3000 },
+      { label: "Evaluating enrollment flow", icon: "📝", duration: 3000 },
+      { label: "Analyzing SEO visibility", icon: "🔍", duration: 3000 },
+      { label: "Reviewing accessibility", icon: "♿", duration: 2000 },
+      { label: "Compiling your audit", icon: "📊", duration: 2000 },
+    ];
+
+    function ScanningView({ url }) {
+      const [phase, setPhase] = useState(0);
+      const [progress, setProgress] = useState(0);
+      useEffect(() => {
+        const total = SCAN_PHASES.reduce((s, p) => s + p.duration, 0);
+        let elapsed = 0;
+        const iv = setInterval(() => {
+          elapsed += 100;
+          setProgress(Math.min((elapsed / total) * 100, 95));
+          let acc = 0;
+          for (let i = 0; i < SCAN_PHASES.length; i++) { acc += SCAN_PHASES[i].duration; if (elapsed < acc) { setPhase(i); break; } }
+        }, 100);
+        return () => clearInterval(iv);
+      }, []);
+      const cur = SCAN_PHASES[Math.min(phase, SCAN_PHASES.length - 1)];
+      return (
+        <div style={{ textAlign: "center", padding: "80px 20px", background: `linear-gradient(180deg, ${BRAND.navy}, ${BRAND.navyLight})`, borderRadius: 20, margin: "40px 0", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: 20, right: 20 }}><TicTacToeGrid size={100} opacity={0.06} /></div>
+          <div style={{ width: 70, height: 70, margin: "0 auto 28px", borderRadius: "50%", border: `3px solid ${BRAND.navyMid}`, borderTopColor: BRAND.teal, animation: "spin 1s linear infinite" }} />
+          <h2 style={{ fontSize: 24, color: "#fff", margin: "0 0 8px", fontWeight: 700 }}>Auditing Your Camp Website</h2>
+          <p style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", margin: "0 0 28px", wordBreak: "break-all" }}>{url}</p>
+          <div style={{ maxWidth: 380, margin: "0 auto 18px", background: "rgba(255,255,255,0.1)", borderRadius: 8, height: 6, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${BRAND.teal}, ${BRAND.orange})`, borderRadius: 8, transition: "width 0.3s ease" }} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, fontSize: 15, color: "rgba(255,255,255,0.8)" }}>
+            <span style={{ fontSize: 20 }}>{cur.icon}</span><span>{cur.label}...</span>
+          </div>
+        </div>
+      );
+    }
+
+    function TeaserCategoryCard({ name, score, icon }) {
+      const color = getScoreColor(score);
+      return (
+        <div style={{ background: BRAND.white, borderRadius: 14, padding: "20px 14px", border: `1px solid ${BRAND.grayLight}`, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: "1 1 140px", minWidth: 140, boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+          <span style={{ fontSize: 24 }}>{icon}</span>
+          <ScoreGauge score={score} size={80} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: BRAND.charcoal, textAlign: "center" }}>{name}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: 0.5 }}>{getVerdict(score)}</span>
+        </div>
+      );
+    }
+
+    function LeadCaptureForm({ onSubmit, issueCount }) {
+      const [form, setForm] = useState({ firstName: "", lastName: "", email: "" });
+      const [errors, setErrors] = useState({});
+      const validate = () => {
+        const e = {};
+        if (!form.firstName.trim()) e.firstName = "Required";
+        if (!form.lastName.trim()) e.lastName = "Required";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Valid email required";
+        setErrors(e);
+        return Object.keys(e).length === 0;
+      };
+      const handleSubmit = () => { if (validate()) onSubmit(form); };
+      const inputStyle = (field) => ({ width: "100%", padding: "13px 14px", fontSize: 15, fontFamily: "'Outfit', sans-serif", border: `2px solid ${errors[field] ? BRAND.red : BRAND.grayLight}`, borderRadius: 10, outline: "none", background: BRAND.white, transition: "border-color 0.2s", boxSizing: "border-box", color: BRAND.charcoal });
+      return (
+        <div style={{ background: BRAND.white, borderRadius: 18, padding: "36px 28px", maxWidth: 440, margin: "0 auto", boxShadow: "0 12px 48px rgba(0,0,0,0.12)", border: `1px solid ${BRAND.grayLight}` }}>
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
+            <div style={{ width: 52, height: 52, margin: "0 auto 14px", background: BRAND.tealGlow, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🔓</div>
+            <h3 style={{ fontSize: 22, fontWeight: 800, color: BRAND.navy, margin: "0 0 8px" }}>Unlock Your Full Audit</h3>
+            <p style={{ fontSize: 14, color: BRAND.slate, margin: 0, lineHeight: 1.5 }}>
+              We found <strong style={{ color: BRAND.orange }}>{issueCount} areas for improvement</strong> on your camp's website. Get the full breakdown with actionable solutions.
+            </p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <input placeholder="First Name" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} style={inputStyle("firstName")} onFocus={e => e.target.style.borderColor = BRAND.teal} onBlur={e => e.target.style.borderColor = errors.firstName ? BRAND.red : BRAND.grayLight} />
+                {errors.firstName && <span style={{ fontSize: 11, color: BRAND.red }}>{errors.firstName}</span>}
+              </div>
+              <div style={{ flex: 1 }}>
+                <input placeholder="Last Name" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} style={inputStyle("lastName")} onFocus={e => e.target.style.borderColor = BRAND.teal} onBlur={e => e.target.style.borderColor = errors.lastName ? BRAND.red : BRAND.grayLight} />
+                {errors.lastName && <span style={{ fontSize: 11, color: BRAND.red }}>{errors.lastName}</span>}
+              </div>
+            </div>
+            <div>
+              <input type="email" placeholder="Email Address" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} style={inputStyle("email")} onFocus={e => e.target.style.borderColor = BRAND.teal} onBlur={e => e.target.style.borderColor = errors.email ? BRAND.red : BRAND.grayLight} />
+              {errors.email && <span style={{ fontSize: 11, color: BRAND.red }}>{errors.email}</span>}
+            </div>
+            <button onClick={handleSubmit} style={{ width: "100%", padding: "14px", fontSize: 16, fontWeight: 700, background: `linear-gradient(135deg, ${BRAND.teal}, ${BRAND.tealDark})`, color: BRAND.white, border: "none", borderRadius: 10, cursor: "pointer", marginTop: 2, transition: "transform 0.15s, box-shadow 0.15s", boxShadow: `0 4px 16px ${BRAND.teal}40` }}
+              onMouseEnter={e => { e.target.style.transform = "translateY(-1px)"; e.target.style.boxShadow = `0 6px 20px ${BRAND.teal}50`; }}
+              onMouseLeave={e => { e.target.style.transform = "translateY(0)"; e.target.style.boxShadow = `0 4px 16px ${BRAND.teal}40`; }}
+            >Get My Free Full Report →</button>
+            <p style={{ fontSize: 11, color: BRAND.slate, textAlign: "center", margin: 0 }}>No spam. Just your personalized camp website audit.</p>
+          </div>
+        </div>
+      );
+    }
+
+    function ReportSection({ category }) {
+      const [expanded, setExpanded] = useState(true);
+      const color = getScoreColor(category.score);
+      return (
+        <div style={{ background: BRAND.white, borderRadius: 14, overflow: "hidden", border: `1px solid ${BRAND.grayLight}`, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.03)" }}>
+          <button onClick={() => setExpanded(!expanded)} style={{ width: "100%", padding: "18px 20px", display: "flex", alignItems: "center", gap: 14, border: "none", background: "none", cursor: "pointer", textAlign: "left" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: `${color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color, flexShrink: 0 }}>{getGrade(category.score)}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: BRAND.charcoal }}>{category.name}</div>
+              <div style={{ fontSize: 13, color: BRAND.slate, marginTop: 2 }}>{category.summary}</div>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color, flexShrink: 0 }}>{category.score}/100</div>
+            <span style={{ fontSize: 18, color: BRAND.slate, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▾</span>
+          </button>
+          {expanded && (
+            <div style={{ padding: "0 20px 20px" }}>
+              {category.campImpact && (
+                <div style={{ background: `${BRAND.navy}06`, borderRadius: 10, padding: "14px 16px", marginBottom: 16, borderLeft: `3px solid ${BRAND.teal}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: BRAND.teal, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Impact on Your Camp</div>
+                  <p style={{ fontSize: 14, color: BRAND.charcoal, margin: 0, lineHeight: 1.6 }}>{category.campImpact}</p>
+                </div>
+              )}
+              {category.issues?.map((issue, i) => (
+                <div key={i} style={{ padding: "14px 0", borderTop: i > 0 ? `1px solid ${BRAND.grayXLight}` : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, background: issue.severity === "high" ? `${BRAND.red}15` : issue.severity === "medium" ? `${BRAND.yellow}15` : `${BRAND.green}15`, color: issue.severity === "high" ? BRAND.red : issue.severity === "medium" ? BRAND.yellow : BRAND.green }}>{issue.severity}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: BRAND.charcoal }}>{issue.title}</span>
+                  </div>
+                  <p style={{ fontSize: 13, color: BRAND.slate, margin: "0 0 8px", lineHeight: 1.6 }}>{issue.description}</p>
+                  {issue.solution && (
+                    <div style={{ background: BRAND.orangeGlow, borderRadius: 8, padding: "10px 14px", display: "flex", gap: 8 }}>
+                      <span style={{ fontSize: 14, flexShrink: 0 }}>💡</span>
+                      <span style={{ fontSize: 13, color: BRAND.charcoal, lineHeight: 1.5 }}><strong>Solution:</strong> {issue.solution}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function CTABanner() {
+      return (
+        <div style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyLight})`, borderRadius: 18, padding: "40px 28px", textAlign: "center", marginTop: 32, position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: 16, left: 20 }}><TicTacToeGrid size={80} opacity={0.06} /></div>
+          <div style={{ position: "absolute", bottom: 16, right: 20 }}><TicTacToeGrid size={100} opacity={0.04} /></div>
+          <img src={LOGO_URL} alt="Tic Tac Toe Marketing" style={{ height: 28, marginBottom: 20, opacity: 0.9, position: "relative" }} onError={e => { e.target.style.display = "none"; }} />
+          <h3 style={{ fontSize: 24, fontWeight: 800, color: BRAND.white, margin: "0 0 10px", position: "relative" }}>Ready to Fix These Issues?</h3>
+          <p style={{ fontSize: 15, color: "rgba(255,255,255,0.75)", margin: "0 0 24px", lineHeight: 1.6, maxWidth: 480, marginLeft: "auto", marginRight: "auto", position: "relative" }}>
+            We specialize in building camp websites that drive registrations, retreat bookings, and donor engagement. Let us turn these insights into results for your camp.
+          </p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", position: "relative" }}>
+            <a href={SCHEDULE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "14px 28px", background: BRAND.teal, color: BRAND.white, borderRadius: 10, fontSize: 15, fontWeight: 700, textDecoration: "none", boxShadow: "0 4px 16px rgba(0,0,0,0.25)", transition: "transform 0.15s" }}
+              onMouseEnter={e => e.target.style.transform = "translateY(-2px)"} onMouseLeave={e => e.target.style.transform = "translateY(0)"}
+            >Schedule a Free Strategy Call</a>
+            <a href={WEBSITE_SERVICE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", padding: "14px 28px", background: "transparent", color: BRAND.white, borderRadius: 10, fontSize: 15, fontWeight: 600, textDecoration: "none", border: "1px solid rgba(255,255,255,0.3)", transition: "transform 0.15s" }}
+              onMouseEnter={e => e.target.style.transform = "translateY(-2px)"} onMouseLeave={e => e.target.style.transform = "translateY(0)"}
+            >Website Design Services →</a>
+          </div>
+        </div>
+      );
+    }
+
+    function normalizeUrl(input) {
+      let url = input.trim();
+      if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+      try { new URL(url); return url; } catch { return null; }
+    }
+    function extractScores(d) {
+      const c = d?.lighthouseResult?.categories || {};
+      return { performance: Math.round((c.performance?.score||0)*100), accessibility: Math.round((c.accessibility?.score||0)*100), seo: Math.round((c["seo"]?.score||0)*100), bestPractices: Math.round((c["best-practices"]?.score||0)*100) };
+    }
+    function countIssues(d) {
+      const a = d?.lighthouseResult?.audits || {};
+      let c = 0;
+      for (const k of Object.keys(a)) { if (a[k].score !== null && a[k].score < 1 && a[k].scoreDisplayMode !== "informative") c++; }
+      return Math.max(c, 5);
+    }
+    function extractDiagnostics(d) {
+      const a = d?.lighthouseResult?.audits || {};
+      const issues = [];
+      for (const [k, v] of Object.entries(a)) {
+        if (v.score !== null && v.score < 1 && v.scoreDisplayMode !== "informative" && v.title && v.description)
+          issues.push({ id: k, title: v.title, score: v.score, displayValue: v.displayValue || "", description: v.description.split("[")[0].trim() });
+      }
+      issues.sort((a, b) => (a.score ?? 1) - (b.score ?? 1));
+      return issues.slice(0, 25);
+    }
+
+    function buildAnalysisPrompt(url, scores, diagnostics) {
+      return `You are a summer camp website expert working for Tic Tac Toe Marketing for Camps — a niche agency helping faith-based summer camps and retreat centers grow through strategic marketing, website design, SEO, email marketing, social media, and print materials.
+
+Analyze these real PageSpeed Insights results for ${url}.
+
+SCORES: Performance: ${scores.performance}/100, Accessibility: ${scores.accessibility}/100, SEO: ${scores.seo}/100, Best Practices: ${scores.bestPractices}/100
+
+KEY ISSUES:
+${diagnostics.map(d => `- ${d.title}: score ${d.score}, ${d.displayValue} — ${d.description}`).join("\n")}
+
+Respond ONLY with valid JSON (no markdown, no backticks):
+{
+  "executiveSummary": "2-3 sentences for a camp director about how these issues affect enrollment, retreat bookings, and donor engagement",
+  "campReadinessScore": number 0-100,
+  "categories": [
+    { "name": "Performance & Speed", "score": ${scores.performance}, "summary": "one sentence", "campImpact": "camp-specific impact", "issues": [{ "title": "plain English", "severity": "high|medium|low", "description": "non-technical for camp directors", "solution": "practical fix, mention Tic Tac Toe Marketing where appropriate" }] },
+    { "name": "SEO & Discoverability", "score": ${scores.seo}, "summary": "...", "campImpact": "...", "issues": [...] },
+    { "name": "Accessibility & Inclusion", "score": ${scores.accessibility}, "summary": "...", "campImpact": "...", "issues": [...] },
+    { "name": "Trust & Best Practices", "score": ${scores.bestPractices}, "summary": "...", "campImpact": "...", "issues": [...] }
+  ],
+  "topPriorities": ["top 3 fixes with enrollment impact"],
+  "enrollmentTip": "one powerful insight about fixing these issues and camp registration numbers"
+}
+Each category: 2-5 issues. Frame everything for CAMP DIRECTORS, not developers.`;
+    }
+
+    function App() {
+      const [step, setStep] = useState("input");
+      const [url, setUrl] = useState("");
+      const [normalizedUrl, setNormalizedUrl] = useState("");
+      const [scores, setScores] = useState(null);
+      const [issueCount, setIssueCount] = useState(0);
+      const [diagnostics, setDiagnostics] = useState([]);
+      const [analysis, setAnalysis] = useState(null);
+      const [leadInfo, setLeadInfo] = useState(null);
+      const [error, setError] = useState(null);
+      const [analysisLoading, setAnalysisLoading] = useState(false);
+      const reportRef = useRef(null);
+
+      const runAudit = useCallback(async () => {
+        setError(null);
+        const nUrl = normalizeUrl(url);
+        if (!nUrl) { setError("Please enter a valid website URL."); return; }
+        setNormalizedUrl(nUrl); setStep("scanning");
+        try {
+          const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(nUrl)}&category=performance&category=accessibility&category=seo&category=best-practices&strategy=mobile`);
+          if (!res.ok) throw new Error(`API ${res.status}`);
+          const data = await res.json();
+          if (data.error) throw new Error(data.error.message);
+          setScores(extractScores(data)); setIssueCount(countIssues(data)); setDiagnostics(extractDiagnostics(data));
+          setTimeout(() => setStep("teaser"), 1500);
+        } catch (err) {
+          console.error(err);
+          setError("We couldn't reach that website. Please check the URL and try again.");
+          setStep("input");
+        }
+      }, [url]);
+
+      const generateFullReport = useCallback(async (lead) => {
+        setLeadInfo(lead); setAnalysisLoading(true); setStep("fullReport");
+
+        // ═══ WEBHOOK: Send lead to your CRM ═══
+        // Uncomment and set your webhook URL to capture leads:
+        // try {
+        //   await fetch("YOUR_WEBHOOK_URL", {
+        //     method: "POST",
+        //     headers: { "Content-Type": "application/json" },
+        //     body: JSON.stringify({ ...lead, url: normalizedUrl, scores, timestamp: new Date().toISOString() })
+        //   });
+        // } catch (e) { console.error("Webhook error:", e); }
+
+        try {
+          const prompt = buildAnalysisPrompt(normalizedUrl, scores, diagnostics);
+          const res = await fetch(`${API_BASE}/.netlify/functions/analyze`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt })
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          const parsed = JSON.parse(data.text.replace(/```json|```/g, "").trim());
+          setAnalysis(parsed);
+        } catch (err) {
+          console.error(err);
+          setAnalysis(buildFallback(scores, diagnostics));
+        }
+        setAnalysisLoading(false);
+        setTimeout(() => reportRef.current?.scrollIntoView({ behavior: "smooth" }), 300);
+      }, [normalizedUrl, scores, diagnostics]);
+
+      function buildFallback(s, diags) {
+        const mi = (r) => r.slice(0,4).map(d => ({ title: d.title, severity: d.score===0?"high":d.score<0.5?"medium":"low", description: d.description, solution: "Tic Tac Toe Marketing addresses this as part of our Website Design & SEO service. Schedule a free strategy call to learn more." }));
+        const avg = Math.round((s.performance+s.seo+s.accessibility+s.bestPractices)/4);
+        return {
+          executiveSummary: `Your camp website scored an average of ${avg}/100 across four key areas. There are several fixable opportunities to improve your site's ability to attract camp families, fill retreats, and engage donors.`,
+          campReadinessScore: avg,
+          categories: [
+            { name:"Performance & Speed", score:s.performance, summary:getVerdict(s.performance), campImpact:"When a parent researches camps on their phone during a lunch break, a slow site means they move on before seeing your programs.", issues: mi(diags.slice(0,4)) },
+            { name:"SEO & Discoverability", score:s.seo, summary:getVerdict(s.seo), campImpact:"Families searching 'summer camps near me' may never find your site if these SEO gaps aren't addressed.", issues: mi(diags.slice(4,8)) },
+            { name:"Accessibility & Inclusion", score:s.accessibility, summary:getVerdict(s.accessibility), campImpact:"Accessibility barriers can prevent families from exploring your programs and may create compliance risk.", issues: mi(diags.slice(8,12)) },
+            { name:"Trust & Best Practices", score:s.bestPractices, summary:getVerdict(s.bestPractices), campImpact:"Parents are entrusting you with their children. Technical issues quietly undermine the confidence they need to register.", issues: mi(diags.slice(12,16)) },
+          ],
+          topPriorities: ["Improve mobile speed — most camp parents browse on their phones","Fix SEO gaps so families can find your camp on Google","Address accessibility issues to welcome every family"],
+          enrollmentTip: "A 1-second improvement in mobile page load speed can increase conversions by up to 27%. For a camp website, that could mean the difference between a family registering or clicking away."
+        };
+      }
+
+      const reset = () => { setStep("input"); setUrl(""); setNormalizedUrl(""); setScores(null); setAnalysis(null); setLeadInfo(null); setError(null); setDiagnostics([]); setIssueCount(0); setAnalysisLoading(false); };
+      const avgScore = scores ? Math.round((scores.performance+scores.seo+scores.accessibility+scores.bestPractices)/4) : 0;
+
+      return (
+        <div style={{ fontFamily: "'Outfit', sans-serif", background: BRAND.cream, minHeight: "100vh", color: BRAND.charcoal }}>
+          {/* HEADER */}
+          <header style={{ background: BRAND.navy, padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <a href={SITE_URL} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
+              <img src={LOGO_URL} alt="Tic Tac Toe Marketing for Camps" style={{ height: 30, opacity: 0.95 }} onError={e => { e.target.style.display = "none"; }} />
+            </a>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {step !== "input" && <button onClick={reset} style={{ padding: "6px 14px", fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, cursor: "pointer", color: "rgba(255,255,255,0.7)" }}>← New Audit</button>}
+              <a href={SCHEDULE_URL} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 14px", fontSize: 12, fontWeight: 700, background: BRAND.teal, border: "none", borderRadius: 6, color: BRAND.white, textDecoration: "none" }}>Let's Talk</a>
+            </div>
+          </header>
+
+          <main style={{ maxWidth: 720, margin: "0 auto", padding: "0 20px 60px" }}>
+            {/* INPUT */}
+            {step === "input" && (
+              <div style={{ textAlign: "center", paddingTop: 56, animation: "fadeUp 0.6s ease both" }}>
+                <div style={{ position: "relative", display: "inline-block", marginBottom: 20 }}>
+                  <div style={{ position: "absolute", top: -8, right: -24 }}><TicTacToeGrid size={48} opacity={0.08} color={BRAND.navy} /></div>
+                  <div style={{ width: 72, height: 72, borderRadius: 16, background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyLight})`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto", boxShadow: `0 8px 24px ${BRAND.navy}30` }}>
+                    <span style={{ fontSize: 36 }}>🏕️</span>
+                  </div>
+                </div>
+                <h1 style={{ fontSize: 34, lineHeight: 1.2, color: BRAND.navy, margin: "0 0 12px", fontWeight: 900, letterSpacing: "-0.02em" }}>How Does Your Camp<br/>Website Stack Up?</h1>
+                <p style={{ fontSize: 16, color: BRAND.slate, margin: "0 0 36px", lineHeight: 1.6, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>Get a free, instant audit of your camp's website. See exactly what's helping — and hurting — your enrollment numbers.</p>
+                <div style={{ display: "flex", gap: 10, maxWidth: 540, margin: "0 auto 16px", flexWrap: "wrap", justifyContent: "center" }}>
+                  <input type="text" placeholder="e.g. www.yourcamp.com or yourcamp.com" value={url}
+                    onChange={e => { setUrl(e.target.value); setError(null); }}
+                    onKeyDown={e => e.key === "Enter" && runAudit()}
+                    style={{ flex: "1 1 300px", padding: "16px 18px", fontSize: 16, border: `2px solid ${error ? BRAND.red : BRAND.grayLight}`, borderRadius: 12, background: BRAND.white, minWidth: 0, color: BRAND.charcoal, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}
+                  />
+                  <button onClick={runAudit} style={{ padding: "16px 28px", fontSize: 16, fontWeight: 700, background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyLight})`, color: BRAND.white, border: "none", borderRadius: 12, cursor: "pointer", boxShadow: `0 4px 16px ${BRAND.navy}30`, transition: "transform 0.15s", whiteSpace: "nowrap" }}
+                    onMouseEnter={e => e.target.style.transform = "translateY(-1px)"} onMouseLeave={e => e.target.style.transform = "translateY(0)"}
+                  >Audit My Website</button>
+                </div>
+                {error && <p style={{ fontSize: 13, color: BRAND.red, margin: 0 }}>{error}</p>}
+                <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 36, flexWrap: "wrap" }}>
+                  {[["⚡","Speed"],["📱","Mobile"],["🔍","SEO"],["♿","Accessibility"]].map(([icon, label]) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: BRAND.slate, fontWeight: 500 }}><span>{icon}</span>{label}</div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 12, color: BRAND.slate, marginTop: 36, opacity: 0.6 }}>Powered by Google PageSpeed Insights · Analysis by Tic Tac Toe Marketing</p>
+              </div>
+            )}
+
+            {step === "scanning" && <div style={{ animation: "fadeUp 0.4s ease both" }}><ScanningView url={normalizedUrl} /></div>}
+
+            {/* TEASER */}
+            {step === "teaser" && scores && (
+              <div style={{ paddingTop: 40, animation: "fadeUp 0.5s ease both" }}>
+                <div style={{ textAlign: "center", marginBottom: 28 }}>
+                  <h2 style={{ fontSize: 26, fontWeight: 800, color: BRAND.navy, margin: "0 0 6px" }}>Your Camp Website Audit</h2>
+                  <p style={{ fontSize: 14, color: BRAND.slate, margin: 0, wordBreak: "break-all" }}>{normalizedUrl}</p>
+                </div>
+                <div style={{ background: BRAND.white, borderRadius: 18, padding: "32px 24px", textAlign: "center", marginBottom: 20, border: `1px solid ${BRAND.grayLight}`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: BRAND.slate, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 }}>Overall Website Health</div>
+                  <ScoreGauge score={avgScore} size={150} />
+                  <div style={{ fontSize: 18, fontWeight: 800, color: getScoreColor(avgScore), marginTop: 8 }}>{getVerdict(avgScore)}</div>
+                </div>
+                <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", justifyContent: "center" }}>
+                  <TeaserCategoryCard name="Performance" score={scores.performance} icon="⚡" />
+                  <TeaserCategoryCard name="SEO" score={scores.seo} icon="🔍" />
+                  <TeaserCategoryCard name="Accessibility" score={scores.accessibility} icon="♿" />
+                  <TeaserCategoryCard name="Best Practices" score={scores.bestPractices} icon="🛡️" />
+                </div>
+                <div style={{ background: `${BRAND.navy}06`, borderRadius: 14, padding: "18px 22px", marginBottom: 28, border: `1px dashed ${BRAND.navy}18` }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: BRAND.navy, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}><span>📋</span> Quick Findings</div>
+                  <div style={{ fontSize: 14, color: BRAND.charcoal, lineHeight: 1.7 }}>
+                    We found <strong style={{ color: BRAND.orange }}>{issueCount} issues</strong> affecting your camp website.
+                    {scores.performance < 70 && " Your site loads slower than recommended — a problem since most parents browse camps on their phones."}
+                    {scores.seo < 80 && " There are SEO gaps that may prevent families from finding your camp on Google."}
+                    {scores.accessibility < 80 && " Some visitors may have trouble navigating your site."}
+                  </div>
+                </div>
+                <div style={{ position: "relative", marginBottom: 20 }}>
+                  <div style={{ filter: "blur(6px)", opacity: 0.45, pointerEvents: "none", userSelect: "none" }}>
+                    {[1,2].map(i => (
+                      <div key={i} style={{ background: BRAND.white, borderRadius: 14, padding: 20, border: `1px solid ${BRAND.grayLight}`, marginBottom: 12 }}>
+                        <div style={{ height: 14, width: `${55+i*10}%`, background: BRAND.grayLight, borderRadius: 4, marginBottom: 12 }} />
+                        <div style={{ height: 10, width: "90%", background: BRAND.grayLight, borderRadius: 4, marginBottom: 8 }} />
+                        <div style={{ height: 10, width: "80%", background: BRAND.grayLight, borderRadius: 4, marginBottom: 8 }} />
+                        <div style={{ height: 10, width: "85%", background: BRAND.grayLight, borderRadius: 4 }} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+                    <LeadCaptureForm onSubmit={generateFullReport} issueCount={issueCount} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FULL REPORT */}
+            {step === "fullReport" && (
+              <div ref={reportRef} style={{ paddingTop: 40, animation: "fadeUp 0.5s ease both" }}>
+                <div style={{ textAlign: "center", marginBottom: 28 }}>
+                  <h2 style={{ fontSize: 26, fontWeight: 800, color: BRAND.navy, margin: "0 0 6px" }}>{leadInfo ? `${leadInfo.firstName}'s` : "Your"} Full Website Audit</h2>
+                  <p style={{ fontSize: 14, color: BRAND.slate, margin: 0, wordBreak: "break-all" }}>{normalizedUrl}</p>
+                </div>
+                {analysisLoading && (
+                  <div style={{ textAlign: "center", padding: "60px 20px", background: `${BRAND.navy}04`, borderRadius: 18 }}>
+                    <div style={{ width: 50, height: 50, margin: "0 auto 20px", borderRadius: "50%", border: `3px solid ${BRAND.grayLight}`, borderTopColor: BRAND.teal, animation: "spin 1s linear infinite" }} />
+                    <p style={{ fontSize: 16, color: BRAND.navy, fontWeight: 700 }}>Generating your personalized audit...</p>
+                    <p style={{ fontSize: 13, color: BRAND.slate }}>Analyzing your website through the eyes of a camp parent.</p>
+                  </div>
+                )}
+                {analysis && !analysisLoading && (
+                  <>
+                    <div style={{ background: `linear-gradient(135deg, ${BRAND.navy}, ${BRAND.navyLight})`, borderRadius: 18, padding: "28px 24px", marginBottom: 24, color: BRAND.white, position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 12, right: 16 }}><TicTacToeGrid size={80} opacity={0.04} /></div>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, opacity: 0.5, marginBottom: 8 }}>Executive Summary</div>
+                      <p style={{ fontSize: 16, lineHeight: 1.7, margin: 0, position: "relative" }}>{analysis.executiveSummary}</p>
+                      {analysis.campReadinessScore !== undefined && (
+                        <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 16, background: "rgba(255,255,255,0.08)", borderRadius: 12, padding: "14px 18px", position: "relative" }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 32, fontWeight: 900 }}>{analysis.campReadinessScore}%</div>
+                            <div style={{ fontSize: 10, opacity: 0.6, textTransform: "uppercase", letterSpacing: 0.8 }}>Camp Readiness</div>
+                          </div>
+                          <div style={{ flex: 1, height: 8, background: "rgba(255,255,255,0.15)", borderRadius: 4, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${analysis.campReadinessScore}%`, background: BRAND.teal, borderRadius: 4 }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap", justifyContent: "center" }}>
+                      <TeaserCategoryCard name="Performance" score={scores.performance} icon="⚡" />
+                      <TeaserCategoryCard name="SEO" score={scores.seo} icon="🔍" />
+                      <TeaserCategoryCard name="Accessibility" score={scores.accessibility} icon="♿" />
+                      <TeaserCategoryCard name="Best Practices" score={scores.bestPractices} icon="🛡️" />
+                    </div>
+                    {analysis.topPriorities && (
+                      <div style={{ background: BRAND.orangeGlow, borderRadius: 14, padding: "20px 24px", marginBottom: 24, border: `1px solid ${BRAND.orange}20` }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: BRAND.orange, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}><span>🎯</span> Top Priorities</div>
+                        {analysis.topPriorities.map((p, i) => (
+                          <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, fontSize: 14, color: BRAND.charcoal, lineHeight: 1.5 }}>
+                            <span style={{ width: 22, height: 22, borderRadius: "50%", background: BRAND.orange, color: BRAND.white, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{i+1}</span>
+                            <span>{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {analysis.categories?.map((cat, i) => <ReportSection key={i} category={cat} />)}
+                    {analysis.enrollmentTip && (
+                      <div style={{ background: BRAND.white, borderRadius: 14, padding: 24, border: `2px solid ${BRAND.teal}25`, marginTop: 8, display: "flex", gap: 14, alignItems: "flex-start" }}>
+                        <span style={{ fontSize: 28, flexShrink: 0 }}>💡</span>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: BRAND.teal, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.8 }}>Enrollment Insight</div>
+                          <p style={{ fontSize: 15, color: BRAND.charcoal, margin: 0, lineHeight: 1.7 }}>{analysis.enrollmentTip}</p>
+                        </div>
+                      </div>
+                    )}
+                    <CTABanner />
+                    <div style={{ textAlign: "center", marginTop: 28, paddingTop: 18, borderTop: `1px solid ${BRAND.grayLight}` }}>
+                      <img src={LOGO_URL} alt="Tic Tac Toe Marketing" style={{ height: 22, opacity: 0.15, marginBottom: 8, filter: "brightness(0)" }} onError={e => { e.target.style.display = "none"; }} />
+                      <p style={{ fontSize: 11, color: BRAND.slate, margin: 0 }}>Scores powered by Google PageSpeed Insights · Analysis by Tic Tac Toe Marketing</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
