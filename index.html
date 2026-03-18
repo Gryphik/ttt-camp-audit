@@ -381,15 +381,19 @@ Each category: 2-5 issues. Frame everything for CAMP DIRECTORS, not developers.`
       const generateFullReport = useCallback(async (lead) => {
         setLeadInfo(lead); setAnalysisLoading(true); setStep("fullReport");
 
-        // ═══ WEBHOOK: Send lead to your CRM ═══
-        // Uncomment and set your webhook URL to capture leads:
-        // try {
-        //   await fetch("YOUR_WEBHOOK_URL", {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
-        //     body: JSON.stringify({ ...lead, url: normalizedUrl, scores, timestamp: new Date().toISOString() })
-        //   });
-        // } catch (e) { console.error("Webhook error:", e); }
+// ═══ WEBHOOK: Send lead to Zoho Flow ═══
+        try {
+          await fetch("https://flow.zoho.com/918383767/flow/webhook/incoming?zapikey=1001.111ce6aec9ff105cbe9cc0267ce7597e.701908ea35fda92f4bdd9bb8698f25a5&isdebug=false", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              ...lead, 
+              url: normalizedUrl, 
+              scores, 
+              timestamp: new Date().toISOString() 
+            })
+          });
+        } catch (e) { console.error("Webhook error:", e); }
 
         try {
           const prompt = buildAnalysisPrompt(normalizedUrl, scores, diagnostics);
